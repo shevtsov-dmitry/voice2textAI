@@ -1,7 +1,7 @@
 {
-  "uuid": "mic-button@myself.io",
-  "name": "Mic Button",
-  "description": "Record and convert voice to text",
+  "uuid": "voice-to-text-ai@myself.io",
+  "name": "Voice To Text AI",
+  "description": "Record and convert voice to text locally.",
   "version": 1,
   "shell-version": ["44", "45", "46", "47", "48"]
 }

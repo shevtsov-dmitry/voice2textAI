@@ -1,5 +1,6 @@
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import Soup from 'gi://Soup';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -45,15 +46,15 @@ export default class MicButtonExtension extends Extension {
       if (this._recording) {
         this._icon.gicon = Gio.icon_new_for_string(`${this.path}/icons/mic-recording.png`);
         this._startRecording();
-        Main.notify('Microphone', 'Recording started');
+        Main.notify('Microphone', 'Recording will start in 3..2..1...');
       } else {
         this._icon.gicon = Gio.icon_new_for_string(`${this.path}/icons/mic-off.png`);
         this._stopRecording();
-        Main.notify('Microphone', 'Recording stopped');
+        // Main.notify('Microphone', 'Recording stopped');
       }
     } catch (e) {
       logError(e, 'MicButtonExtension: Failed to toggle microphone');
-      Main.notifyError('Microphone Error', 'Failed to toggle microphone');
+      Main.notifyError('Microphone Error', e.message, 'Failed to toggle microphone');
     }
   }
 
@@ -68,20 +69,44 @@ export default class MicButtonExtension extends Extension {
   }
 
   _stopRecording() {
-    // Example: Stop recording and copy text to clipboard
     try {
-      // Stop arecord process
-      GLib.spawn_command_line_async('pkill -f arecord');
+      // Stop recording using a more precise command
+      GLib.spawn_command_line_async('pkill -f -x arecord');
 
-      // Use modern clipboard API to set text
-      const text = 'Sample transcription text'; // Replace with actual transcription
-      const bytes = new GLib.Bytes(text);
-      this._clipboard.set_content(St.ClipboardType.CLIPBOARD, 'text/plain;charset=utf-8', bytes);
+      // Create HTTP session
+      let httpSession = new Soup.Session();
+      let message = Soup.Message.new('GET', 'http://localhost:8000/transcribe');
 
-      Main.notify('Microphone', 'Text copied to clipboard');
+      // Send async request
+      httpSession.send_and_read_async(message, GLib.PRIORITY_DEFAULT, null, (session, result) => {
+        try {
+          let response = session.send_and_read_finish(result);
+          let text = (new TextDecoder('utf-8')).decode(response.get_data())
+          text = correctRecievedText(text)
+
+          // Set clipboard content
+          let clipboard = St.Clipboard.get_default();
+          clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
+
+          Main.notify('Microphone', 'Text copied to clipboard' + (text.length > 40 ? (": " + text.substring(0, 41) + "...") : ""));
+        } catch (e) {
+          logError(e, 'MicButtonExtension: Failed to process response');
+          Main.notifyError('Microphone Error', e.message, 'Failed to process response');
+        }
+      });
     } catch (e) {
-      logError(e, 'MicButtonExtension: Failed to stop recording or copy text');
-      Main.notifyError('Microphone Error', 'Failed to stop recording or copy text');
+      logError(e, 'MicButtonExtension: Failed to stop recording or send request');
+      Main.notifyError('Microphone Error', 'Failed to stop recording or send request');
+    }
+
+    function correctRecievedText(text) {
+      if (text.length > 2) {
+        text = text.substring(2, text.length - 2);
+      }
+      return text
+
     }
   }
+
+
 }
